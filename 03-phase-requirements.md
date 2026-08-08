@@ -100,3 +100,15 @@ The deliverable must contain, in this order:
 > FR-001: The system should handle resources well and be fast for users.
 
 ### Restate rule: Specific, testable, no qualitative language. Always.
+
+---
+
+## 8. PHASE EXIT
+
+After producing `requirements.md`:
+
+1. Verify all sections are present: Functional Requirements (FR-*), Acceptance Criteria (AC-*), Constraints, Assumptions, Open Questions, Out-of-Scope Items.
+2. Run `check_gate(project_path=<project>, from_phase="requirements", to_phase="design")` to verify deliverables.
+3. Report completion to the human. List all deliverables produced.
+4. **STOP.** Await human approval before proceeding to design phase.
+5. Do NOT begin design work. Do NOT write ADRs. Do NOT write code. Do NOT produce deliverables for future phases.

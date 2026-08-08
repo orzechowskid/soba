@@ -113,3 +113,16 @@ When options meet requirements:
 - [ ] Tradeoffs stated
 - [ ] Simplicity justified
 - [ ] Tech stack choices explained
+
+---
+
+## 8. PHASE EXIT
+
+After producing ADR(s) in `docs/adr/`:
+
+1. Verify all significant architectural decisions are documented with tradeoffs.
+2. Verify each ADR follows Nygard format: Title, Context, Options Considered, Decision, Consequences, Status.
+3. Run `check_gate(project_path=<project>, from_phase="design", to_phase="implementation")` to verify deliverables.
+4. Report completion to the human. List all ADRs produced.
+5. **STOP.** Await human approval before proceeding to implementation phase.
+6. Do NOT write code. Do NOT create source files. Do NOT produce deliverables for future phases.

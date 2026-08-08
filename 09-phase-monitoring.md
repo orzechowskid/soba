@@ -55,3 +55,14 @@ docs/monitoring/<number>-<feature>.md (relative to the **target project root**)
 ```
 
 The filename must align with the ADR and implementation numbering scheme.
+
+---
+
+## PHASE EXIT
+
+After producing `monitoring-spec.md`:
+
+1. Verify all metrics, alerts, and baselines are documented.
+2. Run `check_gate(project_path=<project>, from_phase="deployment", to_phase="monitoring")` to verify deliverables.
+3. Report completion to the human.
+4. **STOP.** SDLC pipeline is complete for this feature.

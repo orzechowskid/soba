@@ -48,6 +48,8 @@ This framework is distributed as an MCP server for LLM consumption. Configure yo
 | `list_documents` | List available SDL docs with tier and purpose |
 | `get_document(doc_name)` | Retrieve a specific document by filename |
 | `get_pipeline_state(project_path)` | Read project pipeline state from `sdlc-state.json`. Requires `project_path` parameter. |
+| `check_gate(project_path, from_phase, to_phase)` | Verify deliverables exist and are properly formatted before requesting human approval. Returns verifiable gate results and lists human judgment gates. |
+| `record_approval(project_path, phase, decision, caveats, risk_acceptances)` | Record a human approval decision for a phase transition. Logs to `docs/decisions/<feature>-approval.md`. |
 
 ### Prompts
 
@@ -79,3 +81,18 @@ This framework is distributed as an MCP server for LLM consumption. Configure yo
 2. Enter a phase → use `sdlc_phase("<phase>")` prompt
 3. Context lost → use `sdlc_resume("<project_path>")` prompt
 4. Reference docs → use `get_document("<filename>")` tool
+
+### Usage Workflow
+
+1. Start a new pipeline → `begin_sdlc(project_path, feature)`
+2. Bootstrap context → use `sdlc_bootstrap` prompt
+3. Enter a phase → use `sdlc_phase("<phase>")` prompt
+4. Agent produces deliverables, then **halts**
+5. Agent runs `check_gate(project_path, from_phase, to_phase)` to verify deliverables
+6. Human reviews deliverables and records decision → `record_approval(project_path, phase, decision, caveats)`
+7. Human advances phase → `set_pipeline_state(project_path, current_phase="<next_phase>")`
+   - Skipping phases requires an `override_reason` parameter
+8. Repeat from step 3 for the new phase
+9. Context lost → use `sdlc_resume("<project_path>")` prompt
+
+**Phase Lock:** The agent MUST NOT advance phases autonomously. Each phase transition requires explicit human action through `set_pipeline_state`.

@@ -4,15 +4,15 @@
 
 You operate through 7 phases. Load the relevant Tier 2 playbook (`03-` through `09-`) for your current phase.
 
-| Phase | Entry | Exit (soft gates) | Deliverables |
-|---|---|---|---|
-| Requirements | Vague request or user prompt | Requirements structured, acceptance criteria defined, constraints identified | `requirements.md` |
-| Design | Approved requirements | Architecture decided, ADR written, tech stack selected | `adr.md` |
-| Implementation | Approved design | Code written, files created, inline docs complete | Source files + `implementation-summary.md` + API documentation (conditional — see directive) |
-| Review | Completed implementation | Self-review checklist passed, issues resolved | `review-report.md` |
-| Testing | Approved review | Test suite written and passing, coverage met | Test files + `test-report.md` |
-| Deployment | Approved tests | Deployment config written, CI/CD gates defined, rollback plan ready | `deploy-config.md` + CI/CD pipeline files |
-| Monitoring | Successful deployment | Metrics instrumented, alerts configured, baselines established | `monitoring-spec.md` |
+| Phase | Entry | Exit (soft gates) | Deliverables | Human Gate |
+|---|---|---|---|---|
+| Requirements | Vague request or user prompt | Requirements structured, acceptance criteria defined, constraints identified | `requirements.md` | Required — agent halts and awaits approval. |
+| Design | Approved requirements | Architecture decided, ADR written, tech stack selected | `adr.md` | Required — agent halts and awaits approval. |
+| Implementation | Approved design | Code written, files created, inline docs complete | Source files + `implementation-summary.md` + API documentation (conditional — see directive) | Required — agent halts and awaits approval. |
+| Review | Completed implementation | Self-review checklist passed, issues resolved | `review-report.md` | Required — agent halts and awaits approval. |
+| Testing | Approved review | Test suite written and passing, coverage met | Test files + `test-report.md` | Required — agent halts and awaits approval. |
+| Deployment | Approved tests | Deployment config written, CI/CD gates defined, rollback plan ready | `deploy-config.md` + CI/CD pipeline files | Required — agent halts and awaits approval. |
+| Monitoring | Successful deployment | Metrics instrumented, alerts configured, baselines established | `monitoring-spec.md` | Required — agent halts and awaits approval. |
 
 ## 2. API DOCUMENTATION DIRECTIVE
 
@@ -60,3 +60,15 @@ If a deliverable is missing or stale, request it or regenerate it before continu
   - `docs/deploy/` exists → Deployment complete
   - `docs/monitoring/` exists → Monitoring complete
 - Trust explicit state (`sdlc-state.json`) over inferred state.
+
+## 8. PHASE TRANSITION PROTOCOL
+
+Phase transitions follow a strict propose-approve cycle:
+
+1. **Agent completes phase** — produces all deliverables listed in the lifecycle table
+2. **Agent halts** — stops work, reports completion, and awaits human approval
+3. **Human reviews deliverables** — approves, approves with caveats, or sends agent back
+4. **Human advances phase** — invokes `set_pipeline_state` to move to next phase
+5. **Agent resumes** — checks state via `get_pipeline_state`, loads phase playbook via `sdlc_phase`
+
+The agent MUST NOT advance phases autonomously. Phase advancement requires explicit human action through `set_pipeline_state`.

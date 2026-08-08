@@ -139,3 +139,17 @@ async function transferFunds(from: UserId, to: UserId, amount: Money) {
 Rule: Validate at the boundary with explicit schemas and fail fast. Use typed domain errors with machine-readable codes, not generic exceptions.
 
 Rule: All UI must be WCAG AA compliant — contrast, keyboard, screen reader, focus, and labels are mandatory, not optional.
+
+---
+
+## 10. PHASE EXIT
+
+After producing source code, implementation summary, and API docs (if applicable):
+
+1. Verify code compiles/runs without errors.
+2. Verify inline documentation is present.
+3. Verify `docs/implementation/<number>-<feature>-summary.md` is written.
+4. Verify API documentation is generated (if APIs are exposed or modified).
+5. Run `check_gate(project_path=<project>, from_phase="implementation", to_phase="review")` to verify deliverables.
+6. Report completion to the human. List all files produced.
+7. **STOP.** Await human approval before proceeding to review phase.

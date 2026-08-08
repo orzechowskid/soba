@@ -120,3 +120,25 @@ Required fields:
 - **Mitigation Strategy** — which pattern(s) from Section 3 apply.
 - **Acceptance Status** — mitigated, accepted with justification, or deferred with date.
 - **Accountability Assignment** — who owns the risk decision and mitigation.
+
+---
+
+## 8. RISK ACCEPTANCE LOGGING
+
+When an agent flags a risk and the human user chooses to proceed despite it, the agent MUST record the acceptance.
+
+### Location
+`docs/risks/<number>-<feature>-acceptances.md` (relative to the target project root), aligned with ADR and implementation numbering.
+
+### Required Fields
+- **Risk Description** — what the risk is
+- **Severity** — Critical, High, Medium, or Low per §2
+- **Agent Recommendation** — what the agent recommended
+- **Human Decision** — approve, approve with caveats, or proceed despite risk
+- **Justification** — why the human decided to proceed
+- **Timestamp** — ISO 8601
+
+### Rules
+- Records are immutable once created. Do not edit or delete.
+- Use the `record_approval` MCP tool to append acceptance records.
+- If the human ignores a Critical risk, the agent MUST re-flag it at the next phase transition.
