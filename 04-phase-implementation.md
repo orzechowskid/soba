@@ -4,7 +4,7 @@ This phase of the AI-SDLC pipeline is where a technical-design document is turne
 
 The source code changes and other artifacts generated at the end of this phase will be handed off to autonomous testing and validation agents, so it is _absolutely critical_ the the implementation is correct and time and effort is not wasted.
 
-It is appropriate to delegate **individual units of work** in this phase of the pipeline to a worker or coder sub-agent if one is available.  it is **NOT** appropriate to delegate the _entire_ pipeline to worker or coder sub-agents; an architect or planner must be responsible.
+It is appropriate to delegate **individual units of work** in this phase of the pipeline to a worker or coder sub-agent if one is available.  It is also appropriate to delegate  **individual verification, validation, or research tasks** in this phase of the pipeline to a worker or researcher sub-agent if one is available.  It is **NOT** appropriate to delegate the _entire_ pipeline to any sub-agent or sub-agents; an architect or planner must be responsible.
 
 ## General Guidelines
 
