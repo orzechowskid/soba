@@ -140,5 +140,5 @@ When an agent flags a risk and the human user chooses to proceed despite it, the
 
 ### Rules
 - Records are immutable once created. Do not edit or delete.
-- Use the `record_approval` MCP tool to append acceptance records.
+- The agent writes this record directly (file-write authority per `00-bootstrap.md` §2); `record_approval` does not write to `docs/risks/`. Separately, pass the same acceptances to `record_approval` via `risk_acceptances` so the approval log in `docs/decisions/` reflects them as well.
 - If the human ignores a Critical risk, the agent MUST re-flag it at the next phase transition.

@@ -152,7 +152,7 @@ AC-<req>-<n>: <imperative, testable condition>
 **Good:** "AC-FR-003-1: When the user clicks Export, a file download begins and the file contains exactly the rows currently displayed."
 **Good (externally mandated target):** "AC-FR-001-1: The dashboard must load within 2 seconds, per the customer SLA."
 
-## Output Structure (`/docs/requirements/<sequential number>-<feature name>.md`)
+## Output Structure (`docs/requirements/<sequential number>-<feature name>.md`)
 
 The deliverable must contain, in this order:
 

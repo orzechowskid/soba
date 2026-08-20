@@ -66,8 +66,8 @@ Your planning behavior changes depending on the current SDLC phase:
 | **Requirements** | Produce requirements documents in `docs/requirements/` directly | Prohibited |
 | **Design** | Produce technical-design documents in `docs/design/` directly | Prohibited |
 | **Implementation** | Create implementation plan, delegate steps to Workers | Required |
-| **Review** | Produce `review-report.md` directly | Prohibited |
-| **Testing** | Produce test files, plus a report in `docs/test-reports/` | Required |
+| **Review** | Produce `docs/review/<n>-<feature>.md` directly | Prohibited |
+| **Testing** | Produce test files, plus a report in `docs/testing/` | Required |
 | **Deployment** | Produce deploy configs directly | Required |
 | **Monitoring** | Produce monitoring specs directly | Required |
 

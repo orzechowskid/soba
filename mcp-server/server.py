@@ -218,14 +218,23 @@ async def get_prompt(name, arguments=None):
                 except json.JSONDecodeError:
                     current_phase = "requirements"
             else:
-                # Infer phase
+                # Infer phase: a phase directory's existence means that phase is
+                # complete (01-lifecycle-overview.md §6), so current is the next phase.
                 current_phase = "requirements"
-                if (project_path / "docs/enhancement").exists(): current_phase = "enhancement"
-                if (project_path / "docs/design").exists(): current_phase = "design"
-                if (project_path / "docs/implementation").exists(): current_phase = "implementation"
-                if (project_path / "docs/review").exists(): current_phase = "review"
-                if (project_path / "docs/deploy").exists(): current_phase = "deployment"
-                if (project_path / "docs/monitoring").exists(): current_phase = "monitoring"
+                dir_for_phase = {
+                    "enhancement": "enhancement",
+                    "requirements": "requirements",
+                    "design": "design",
+                    "implementation": "implementation",
+                    "review": "review",
+                    "testing": "testing",
+                    "deployment": "deploy",
+                    "monitoring": "monitoring",
+                }
+                for i, phase in enumerate(VALID_PHASES):
+                    if (project_path / "docs" / dir_for_phase[phase]).is_dir():
+                        if i + 1 < len(VALID_PHASES):
+                            current_phase = VALID_PHASES[i + 1]
 
             messages.append(PromptMessage(role="user", content=TextContent(type="text", text=f"Current Pipeline State:\n{state_text}\n\nLoading playbook for phase: {current_phase}")))
             # Load phase playbook
@@ -308,26 +317,25 @@ async def call_tool(name, args):
                     result = [TextContent(type="text", text="Error: Invalid sdlc-state.json format.")]
                     logger.debug(f"call_tool: get_pipeline_state invalid json, {len(result)} items")
                     return result
-            # Infer state from docs/ directories
+            # Infer state from docs/ directories.
+            # Per 01-lifecycle-overview.md §6, a phase directory's existence means
+            # that phase is COMPLETE, so the current phase is the next one.
             inferred = {"current_phase": "requirements", "feature": "unknown", "last_gate": "none"}
-            if (project_path / "docs/enhancement").exists():
-                inferred["current_phase"] = "enhancement"
-                inferred["last_gate"] = "enhancement"
-            if (project_path / "docs/design").exists():
-                inferred["current_phase"] = "design"
-                inferred["last_gate"] = "requirements"
-            if (project_path / "docs/implementation").exists():
-                inferred["current_phase"] = "implementation"
-                inferred["last_gate"] = "design"
-            if (project_path / "docs/review").exists():
-                inferred["current_phase"] = "review"
-                inferred["last_gate"] = "implementation"
-            if (project_path / "docs/deploy").exists():
-                inferred["current_phase"] = "deployment"
-                inferred["last_gate"] = "review"
-            if (project_path / "docs/monitoring").exists():
-                inferred["current_phase"] = "monitoring"
-                inferred["last_gate"] = "deployment"
+            dir_for_phase = {
+                "enhancement": "enhancement",
+                "requirements": "requirements",
+                "design": "design",
+                "implementation": "implementation",
+                "review": "review",
+                "testing": "testing",
+                "deployment": "deploy",
+                "monitoring": "monitoring",
+            }
+            for i, phase in enumerate(VALID_PHASES):
+                if (project_path / "docs" / dir_for_phase[phase]).is_dir():
+                    if i + 1 < len(VALID_PHASES):
+                        inferred["current_phase"] = VALID_PHASES[i + 1]
+                    inferred["last_gate"] = phase
             text = json.dumps(inferred, indent=2)
             result = [TextContent(type="text", text=text)]
             logger.debug(f"call_tool: get_pipeline_state inferred returning {len(result)} items, text length={len(result[0].text)}")
@@ -423,7 +431,7 @@ async def call_tool(name, args):
                 initial_phase = "enhancement"
             else:
                 initial_phase = "requirements"
-            state = {"current_phase": initial_phase, "feature": feature, "last_gate": "none", "timestamp": datetime.datetime.now().isoformat()}
+            state = {"schema_version": 2, "current_phase": initial_phase, "feature": feature, "last_gate": "none", "timestamp": datetime.datetime.now().isoformat()}
             # Note brownfield detection in state
             state["project_mode"] = "enhancement" if has_prior_artifacts else "greenfield"
             state_file.parent.mkdir(parents=True, exist_ok=True)

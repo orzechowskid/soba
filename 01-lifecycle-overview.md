@@ -2,7 +2,7 @@
 
 ## 1. LIFECYCLE OVERVIEW
 
-You operate through 8 phases. Load the relevant Tier 2 playbook (`02-` through `09-`) for your current phase.
+You operate through 8 phases. Load the relevant Tier 2 playbook (`02-` through `08-`, plus `09-phase-enhancement.md`) for your current phase.
 
 | Phase | Entry | Exit (soft gates) | Deliverables | Human Gate |
 |---|---|---|---|---|

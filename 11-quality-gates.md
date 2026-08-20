@@ -25,7 +25,7 @@
 
 ---
 
-## Gate: Requirements → Technical Design
+## Gate: Requirements → Design
 
 ### Verifiable
 - `docs/requirements/` directory exists with a file named `<sequential number>-<feature name>.md`
@@ -43,7 +43,7 @@
 
 ---
 
-## Gate: Technical Design → Implementation
+## Gate: Design → Implementation
 
 ### Verifiable
 - `docs/design/` directory exists with a file named `<sequential number>-<feature name>.md`
@@ -92,7 +92,7 @@
 
 ### Verifiable
 - Test files exist alongside source or in `tests/` directory
-- `docs/testing/` directory exists with a file named `<sequential number>-<feature name>-test-report.md`
+- `docs/testing/` directory exists with a file named `<sequential number>-<feature name>.md`
 - Test suite passes (exit code 0)
 - Coverage meets defined threshold (documented in test report)
 - The test report's AC→test traceability table covers 100% of the technical-design document's acceptance criteria, each with a passing test

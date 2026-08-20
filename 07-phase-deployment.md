@@ -42,9 +42,8 @@ Every deployment MUST include a rollback plan:
 ## 5. OUTPUT
 
 **Deliverables:**
-- `docs/deploy/<number>-<feature>-deploy-config.md` — deployment strategy, environment config, rollout plan
+- `docs/deploy/<number>-<feature>.md` — deployment strategy, environment config, rollout plan, rollback procedures
 - CI/CD pipeline files (e.g., `.github/workflows/`, `Jenkinsfile`, etc.)
-- `docs/deploy/<number>-<feature>-rollback.md` — rollback procedures
 
 ## 6. PHASE EXIT
 

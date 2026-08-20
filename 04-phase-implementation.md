@@ -121,7 +121,7 @@ Every feature produces:
   - Select the appropriate tool for your stack (e.g., OpenAPI/Swagger for REST, TSDoc + `typedoc` for TS, `go doc` for Go).
   - When not required, or when dependency constraints prevent generation, record a skip and its reason in the implementation summary (e.g., "API documentation: not required — feature exposes no API of its own").
 
-## 9. EXAMPLES
+## Examples
 
 Examples in this document are illustrative, not prescriptive. Follow the stated rules, not the example content. Do not reproduce example naming, structure, or domain specifics.
 

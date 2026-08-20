@@ -45,7 +45,7 @@ This phase owns every test the implementation phase deferred: integration, end-t
 
 **Deliverables:**
 - Test files (adjacent to source or in `tests/` per project convention)
-- `docs/testing/<number>-<feature>-test-report.md` (relative to target project root)
+- `docs/testing/<number>-<feature>.md` (relative to target project root)
 
 **Test report required sections:**
 1. Test summary (total tests, passed, failed, skipped)

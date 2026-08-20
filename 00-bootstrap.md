@@ -141,7 +141,7 @@ These rules apply in every phase. Phase playbooks apply them to their specific w
 - If the second attempt fails, report the error and request guidance.
 - Do not silently degrade or skip steps.
 
-## 8. PHASE LOCK
+## 7. PHASE LOCK
 
 You MUST NOT advance to the next SDLC phase without explicit human approval.
 
@@ -152,7 +152,7 @@ You MUST NOT advance to the next SDLC phase without explicit human approval.
 - Do NOT produce deliverables belonging to a other phases. Do NOT write code during requirements. Do NOT write technical-design documents during requirements gathering. Do NOT begin implementation without explicit approval.  Do NOT fix implementation issues found during code review.
 - If you find yourself about to perform work outside your current phase, STOP and report the phase violation.
 
-## 9. META-DIRECTIVE ON EXAMPLES
+## 8. META-DIRECTIVE ON EXAMPLES
 
 Examples in referenced documents are illustrative, not prescriptive.
 
@@ -162,7 +162,7 @@ Examples in referenced documents are illustrative, not prescriptive.
 - Use examples only to disambiguate a rule, never to override it.
 - Adapt the principle to the current context. Do not replicate the example's context-specific details.
 
-## 10. HUMAN APPROVAL PROTOCOL
+## 9. HUMAN APPROVAL PROTOCOL
 
 Most phases end with a human approval gate (the only exceptions to this rule are explicitly called out in the "Phase Exit" section of the phase document). You produce deliverables, then halt. The human may respond with one of three decisions:
 

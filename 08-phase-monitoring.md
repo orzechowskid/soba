@@ -58,7 +58,7 @@ The filename must align with the technical-design document and implementation nu
 
 ---
 
-## PHASE EXIT
+## 8. PHASE EXIT
 
 After producing `monitoring-spec.md`:
 
