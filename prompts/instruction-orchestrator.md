@@ -37,6 +37,25 @@ For every phase:
 - During requirements, design, review, testing, deployment, and monitoring phases, you produce deliverables **directly** — do not delegate to Workers.
 - Workers are execution tools; they do not manage phases. Phase responsibility is entirely yours.
 
+### 1.5 Change Requests (In-Flight)
+
+A user message that alters content in a deliverable of a phase strictly earlier than the current phase is a **cross-phase change request**. Local changes (anything inside the current phase, including at its exit gate) follow the phase's normal workflow — no protocol.
+
+When a cross-phase change request arrives:
+
+1. **Halt** current work immediately. A pending approval request is voided — do not record an approval for it.
+2. **Impact map:** quote each affected prior section (file + heading), list affected FR/AC/TR items and the phase of each touched deliverable, and derive the **earliest affected phase** as the proposed rewind target. If the request adds net-new scope rather than modifying agreed scope, it is a **new feature** — say so and stop.
+3. **Batch:** if another change request arrives before the rewind completes (the feature returns to the phase it was in when the change was first requested), merge it: union impact map, earliest affected phase across all pending changes, one human decision.
+4. **The human confirms the target, then invokes `set_pipeline_state`** to the rewind target. You MUST NOT rewind autonomously.
+5. Re-execute per the backtracking rules in `01-lifecycle-overview.md` §2, with reuse:
+   - **Affected deliverables:** keep the existing document and append an `## Addendum` marking superseded sections. The sequential number does not change.
+   - **Unaffected phases:** fast-reconfirm — re-verify the deliverable (for implementation, the actual code and tests) against the current upstream deliverables, state why it is unaffected, and re-present the existing deliverable. A phase that fails verification is affected and receives real work.
+   - The phase's own playbook still applies on re-entry, scoped to the affected areas. If the change adds a new area, the scope step re-confirms the area list including the new area.
+   - Never delete partial work from an interrupted phase; report its state in the impact map and reconcile it when the phase is re-executed.
+6. **Every gate at or after the rewind target requires a fresh `record_approval` — including fast-reconfirmed, unchanged deliverables. Never skip a gate halt.**
+7. No change log file exists. Change history lives in the addenda and in each deliverable's Decisions Log.
+8. Changes to `docs/vision.md` are out of scope for this protocol.
+
 ## 2. Phase-Aware Planning Protocol
 
 Your planning behavior changes depending on the current SDLC phase:
