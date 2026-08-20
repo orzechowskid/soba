@@ -9,15 +9,32 @@
 
 ---
 
-## Gate: Requirements → Design
+## Gate: Enhancement → Requirements
 
 ### Verifiable
-- `requirements.md` exists in project root
+- `docs/enhancement/` directory exists with a file named `<sequential number>-<feature name>.md`
+- File contains Current System Overview section
+- File contains Prior Features section
+- File contains Relevant Design References section
+- File contains Change Context section
+
+### Human Judgment
+- System understanding is adequate for the proposed change
+- Prior architectural decisions have been properly considered
+- The change context accurately describes where the new feature fits
+
+---
+
+## Gate: Requirements → Technical Design
+
+### Verifiable
+- `docs/requirements/` directory exists with a file named `<sequential number>-<feature name>.md`
 - File contains numbered functional requirements (FR-001, FR-002, …)
 - File contains acceptance criteria per requirement (AC-*)
 - File contains constraints section
 - File contains assumptions section
 - File contains open questions section
+- File contains a Self-Review section.  Is this requirements doc ready to be handed off to a technical architect?
 
 ### Human Judgment
 - Requirements completeness and correctness
@@ -26,13 +43,14 @@
 
 ---
 
-## Gate: Design → Implementation
+## Gate: Technical Design → Implementation
 
 ### Verifiable
-- `docs/adr/` directory exists with at least one `.md` file
-- Each ADR contains: Title, Context, Options Considered, Decision, Consequences, Status
-- Technology stack is identified in ADRs
-- Dependencies are identified in ADRs
+- `docs/design/` directory exists with a file named `<sequential number>-<feature name>.md`
+- Technical-design document contains: Numbered Technical Requirements (TR-*), Acceptance Criteria (AC-*), Constraints, Assumptions, References
+- Technology stack is identified in technical-design documents
+- Dependencies are identified in technical-design documents
+- File contains a Self-Review section.  Is this technical-design doc ready to be handed off to an autonomous coding agent?
 
 ### Human Judgment
 - Architecture is sound and appropriate for the problem
@@ -44,10 +62,12 @@
 ## Gate: Implementation → Review
 
 ### Verifiable
-- Source code files exist and match ADR architecture
+- Source code files exist and match technical-design document architecture
 - `docs/implementation/` directory contains implementation summary
 - Inline documentation is present in source files
-- API documentation exists (if APIs are exposed or modified)
+- The implementation summary's AC→test mapping accounts for 100% of the technical-design document's acceptance criteria (each mapped to a named test or an explicit deferral to the testing phase)
+- The project's test suite runs and exits successfully (exit code 0)
+- API documentation exists, or the implementation summary records a documented skip with reason (documentation is required only when the feature exposes or modifies an API of its own, and the tooling used must not violate the design document's dependency constraints)
 
 ### Human Judgment
 - Code quality meets team standards
@@ -59,7 +79,7 @@
 ## Gate: Review → Testing
 
 ### Verifiable
-- `docs/review/` directory contains review report
+- `docs/review/` directory exists with a file named `<sequential number>-<feature name>.md`
 - Self-review checklist is present in review report
 
 ### Human Judgment
@@ -72,9 +92,10 @@
 
 ### Verifiable
 - Test files exist alongside source or in `tests/` directory
-- `docs/testing/` directory contains test report
+- `docs/testing/` directory exists with a file named `<sequential number>-<feature name>-test-report.md`
 - Test suite passes (exit code 0)
 - Coverage meets defined threshold (documented in test report)
+- The test report's AC→test traceability table covers 100% of the technical-design document's acceptance criteria, each with a passing test
 
 ### Human Judgment
 - Test coverage is sufficient
@@ -86,7 +107,7 @@
 ## Gate: Deployment → Monitoring
 
 ### Verifiable
-- `docs/deploy/` directory contains deployment configuration
+- `docs/deploy/` directory exists with a file named `<sequential number>-<feature name>.md`
 - Rollback procedure is documented
 - CI/CD pipeline files exist
 

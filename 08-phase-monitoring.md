@@ -54,7 +54,7 @@ Write the approved plan to:
 docs/monitoring/<number>-<feature>.md (relative to the **target project root**)
 ```
 
-The filename must align with the ADR and implementation numbering scheme.
+The filename must align with the technical-design document and implementation numbering scheme.
 
 ---
 

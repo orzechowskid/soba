@@ -2,11 +2,15 @@
 
 ## 1. TEST STRATEGY
 
-Write tests at three levels, ordered by priority:
+This phase owns every test the implementation phase deferred: integration, end-to-end, component, accessibility, visual-regression, and smoke tests, and every acceptance criterion whose proof requires a running instance of the system. Write tests at three levels, ordered by priority:
 
-1. **Unit tests** — test individual functions/methods in isolation. Fast, deterministic, no external dependencies.
+1. **Unit tests** — test individual functions/methods in isolation. Fast, deterministic, no external dependencies. Write them here only where an acceptance criterion's proof genuinely requires a unit-level test the implementation phase did not already provide. The implementation phase's internal unit tests are inherited as-is — do not duplicate or rewrite them.
 2. **Integration tests** — test interactions between modules or with external services (using mocks/stubs where appropriate).
 3. **End-to-end tests** — test complete user workflows through the full stack. Fewer in number, higher value.
+
+**Culture.** This phase is black-box and acceptance-criterion-driven: tests verify observable behavior against the acceptance criteria in the technical-design document. The implementation phase is white-box and unit-level by design; the two test populations do not overlap.
+
+**Acceptance criterion closure (mandatory).** The implementation summary's AC→test mapping lists every acceptance criterion deferred to this phase. Every deferred acceptance criterion must be covered by a named, passing test in this phase's suite. There is no further deferral: when this phase exits, every acceptance criterion in the technical-design document has a named passing test.
 
 ## 2. COVERAGE TARGETS
 
@@ -49,6 +53,7 @@ Write tests at three levels, ordered by priority:
 3. Flaky tests (if any, with justification)
 4. Regression tests added
 5. Known limitations or untested paths
+6. AC→test traceability table: every acceptance criterion in the technical-design document, with owning phase (implementation / testing), test name, and result (pass). Must cover 100% of the design document's acceptance criteria.
 
 ## 7. PHASE EXIT
 

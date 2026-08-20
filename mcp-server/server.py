@@ -5,6 +5,8 @@ import json
 import traceback
 import sys
 import signal
+import re
+import subprocess
 from pathlib import Path
 
 from mcp.server import Server
@@ -56,16 +58,100 @@ app = Server("ai-sdlc-framework")
 
 # Prompt handlers
 PHASE_MAP = {
-    "requirements": "03-phase-requirements.md",
-    "design": "04-phase-design.md",
-    "implementation": "05-phase-implementation.md",
-    "review": "06-phase-review.md",
-    "testing": "07-phase-testing.md",
-    "deployment": "08-phase-deployment.md",
-    "monitoring": "09-phase-monitoring.md",
+    "enhancement": "09-phase-enhancement.md",
+    "requirements": "02-phase-requirements.md",
+    "design": "03-phase-design.md",
+    "implementation": "04-phase-implementation.md",
+    "review": "05-phase-review.md",
+    "testing": "06-phase-testing.md",
+    "deployment": "07-phase-deployment.md",
+    "monitoring": "08-phase-monitoring.md",
 }
 
-VALID_PHASES = ("requirements", "design", "implementation", "review", "testing", "deployment", "monitoring")
+VALID_PHASES = ("enhancement", "requirements", "design", "implementation", "review", "testing", "deployment", "monitoring")
+
+
+def _detect_test_command(project_path):
+    """Detect the project's test command.
+
+    Returns (argv, label) or None if no test command can be detected.
+    """
+    pkg = project_path / "package.json"
+    if pkg.is_file():
+        try:
+            scripts = json.loads(pkg.read_text(encoding="utf-8")).get("scripts", {})
+        except (json.JSONDecodeError, OSError):
+            scripts = {}
+        if isinstance(scripts, dict) and scripts.get("test"):
+            return ["npm", "test"], "npm test"
+    pyproject = project_path / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            text = pyproject.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            text = ""
+        if "[tool.pytest" in text:
+            return [sys.executable, "-m", "pytest"], "python -m pytest"
+    if (project_path / "pytest.ini").is_file():
+        return [sys.executable, "-m", "pytest"], "python -m pytest"
+    if (project_path / "go.mod").is_file():
+        return ["go", "test", "./..."], "go test ./..."
+    if (project_path / "Cargo.toml").is_file():
+        return ["cargo", "test"], "cargo test"
+    makefile = project_path / "Makefile"
+    if makefile.is_file():
+        try:
+            make_text = makefile.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            make_text = ""
+        if re.search(r"^test\s*:", make_text, re.MULTILINE):
+            return ["make", "test"], "make test"
+    node_test_exts = ("js", "ts", "mjs", "mts", "cjs", "jsx", "tsx")
+    node_tests = [
+        p for ext in node_test_exts for p in project_path.glob(f"**/*.test.{ext}")
+    ]
+    if node_tests:
+        return ["node", "--test"], "node --test"
+    py_tests = list(project_path.glob("**/test_*.py")) + list(
+        project_path.glob("**/*_test.py")
+    )
+    if py_tests:
+        return [sys.executable, "-m", "pytest"], "python -m pytest"
+    return None
+
+
+def _run_test_suite(project_path, timeout=600):
+    """Run the project's detected test suite.
+
+    Returns (passed: bool | None, detail: str). passed is None when no test
+    command could be detected.
+    """
+    detected = _detect_test_command(project_path)
+    if detected is None:
+        return None, (
+            "no test command detected (no package.json test script, pytest "
+            "config, go.mod, Cargo.toml, Makefile test target, or *.test.* "
+            "files)"
+        )
+    argv, label = detected
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=str(project_path),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"{label} timed out after {timeout}s"
+    except FileNotFoundError:
+        return False, f"{label}: executable not found"
+    output = (proc.stdout or "") + (proc.stderr or "")
+    tail = output[-800:]
+    if proc.returncode == 0:
+        return True, f"{label} exited 0"
+    return False, f"{label} exited {proc.returncode}: {tail}"
+
 
 @app.list_prompts()
 async def list_prompts():
@@ -87,7 +173,7 @@ async def get_prompt(name, arguments=None):
     logger.debug(f"get_prompt: entry, name={name}, argument_keys={list((arguments or {}).keys())}")
     try:
         arguments = arguments or {}
-        
+
         if name == "sdlc_bootstrap":
             messages = []
             for doc in ["00-bootstrap.md", "01-lifecycle-overview.md"]:
@@ -96,7 +182,7 @@ async def get_prompt(name, arguments=None):
                     messages.append(PromptMessage(role="user", content=TextContent(type="text", text=path.read_text(encoding="utf-8"))))
             logger.debug(f"get_prompt: sdlc_bootstrap returning {len(messages)} messages")
             return {"messages": messages}
-        
+
         elif name == "sdlc_phase":
             phase = arguments.get("phase_name", "")
             doc = PHASE_MAP.get(phase)
@@ -112,7 +198,7 @@ async def get_prompt(name, arguments=None):
             result = {"messages": [PromptMessage(role="user", content=TextContent(type="text", text=path.read_text(encoding="utf-8")))]}
             logger.debug(f"get_prompt: sdlc_phase returning {len(result['messages'])} messages")
             return result
-        
+
         elif name == "sdlc_resume":
             messages = []
             # Load Tier 1
@@ -134,12 +220,13 @@ async def get_prompt(name, arguments=None):
             else:
                 # Infer phase
                 current_phase = "requirements"
-                if (project_path / "docs/adr").exists(): current_phase = "design"
+                if (project_path / "docs/enhancement").exists(): current_phase = "enhancement"
+                if (project_path / "docs/design").exists(): current_phase = "design"
                 if (project_path / "docs/implementation").exists(): current_phase = "implementation"
                 if (project_path / "docs/review").exists(): current_phase = "review"
                 if (project_path / "docs/deploy").exists(): current_phase = "deployment"
                 if (project_path / "docs/monitoring").exists(): current_phase = "monitoring"
-            
+
             messages.append(PromptMessage(role="user", content=TextContent(type="text", text=f"Current Pipeline State:\n{state_text}\n\nLoading playbook for phase: {current_phase}")))
             # Load phase playbook
             doc = PHASE_MAP.get(current_phase)
@@ -149,7 +236,7 @@ async def get_prompt(name, arguments=None):
                     messages.append(PromptMessage(role="user", content=TextContent(type="text", text=path.read_text(encoding="utf-8"))))
             logger.debug(f"get_prompt: sdlc_resume returning {len(messages)} messages")
             return {"messages": messages}
-        
+
         logger.debug("get_prompt: unknown prompt name, returning empty")
         return {"messages": []}
     except Exception:
@@ -223,7 +310,10 @@ async def call_tool(name, args):
                     return result
             # Infer state from docs/ directories
             inferred = {"current_phase": "requirements", "feature": "unknown", "last_gate": "none"}
-            if (project_path / "docs/adr").exists():
+            if (project_path / "docs/enhancement").exists():
+                inferred["current_phase"] = "enhancement"
+                inferred["last_gate"] = "enhancement"
+            if (project_path / "docs/design").exists():
                 inferred["current_phase"] = "design"
                 inferred["last_gate"] = "requirements"
             if (project_path / "docs/implementation").exists():
@@ -262,23 +352,23 @@ async def call_tool(name, args):
                 new_phase = args["current_phase"]
                 phase_order = list(VALID_PHASES)
                 existing_phase = state.get("current_phase", "requirements")
-                
+
                 if existing_phase in phase_order and new_phase in phase_order:
                     old_idx = phase_order.index(existing_phase)
                     new_idx = phase_order.index(new_phase)
-                    
+
                     # Forward skip: new is more than 1 phase ahead
                     if new_idx > old_idx + 1:
                         skipped = phase_order[old_idx + 1:new_idx]
                         warning = f"Warning: Skipping phases {', '.join(skipped)}. Ensure deliverables for those phases are complete."
                         logger.warning(f"call_tool: set_pipeline_state {warning}")
-                        
+
                         # Require override_reason when skipping
                         override_reason = args.get("override_reason")
                         if not override_reason:
                             result = [TextContent(type="text", text=f"{warning}\n\nTo skip phases, provide an 'override_reason' parameter explaining why.")]
                             return result
-                        
+
                         # Store override reason in state
                         state["override_reason"] = override_reason
                         state["skipped_phases"] = skipped
@@ -317,7 +407,25 @@ async def call_tool(name, args):
                 logger.debug(f"call_tool: begin_sdlc state exists, {len(result)} items")
                 return result
             import datetime
-            state = {"current_phase": "requirements", "feature": feature, "last_gate": "none", "timestamp": datetime.datetime.now().isoformat()}
+            # Auto-detect: brownfield (enhancement) if prior artifacts exist
+            docs_dirs = [
+                project_path / "docs" / "requirements",
+                project_path / "docs" / "design",
+                project_path / "docs" / "implementation",
+                project_path / "docs" / "review",
+                project_path / "docs" / "testing",
+                project_path / "docs" / "deploy",
+                project_path / "docs" / "monitoring",
+                project_path / "docs" / "enhancement",
+            ]
+            has_prior_artifacts = any(d.is_dir() for d in docs_dirs)
+            if has_prior_artifacts:
+                initial_phase = "enhancement"
+            else:
+                initial_phase = "requirements"
+            state = {"current_phase": initial_phase, "feature": feature, "last_gate": "none", "timestamp": datetime.datetime.now().isoformat()}
+            # Note brownfield detection in state
+            state["project_mode"] = "enhancement" if has_prior_artifacts else "greenfield"
             state_file.parent.mkdir(parents=True, exist_ok=True)
             state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
             # Create docs directory
@@ -330,121 +438,389 @@ async def call_tool(name, args):
             project_path = Path(args.get("project_path", ""))
             from_phase = args.get("from_phase", "")
             to_phase = args.get("to_phase", "")
-            
+
             verifiable = []
             human_gates = []
-            
+
             gate_key = f"{from_phase}->{to_phase}"
-            
-            if gate_key == "requirements->design":
-                req_file = project_path / "requirements.md"
-                if req_file.is_file():
-                    content = req_file.read_text(encoding="utf-8")
-                    verifiable.append({"gate": "requirements.md exists", "status": "pass"})
-                    if "FR-" in content or "FR-" in content.upper():
-                        verifiable.append({"gate": "Functional requirements present", "status": "pass"})
-                    else:
-                        verifiable.append({"gate": "Functional requirements present", "status": "fail", "detail": "No FR- entries found"})
-                    if "AC-" in content or "Acceptance" in content:
-                        verifiable.append({"gate": "Acceptance criteria present", "status": "pass"})
-                    else:
-                        verifiable.append({"gate": "Acceptance criteria present", "status": "fail", "detail": "No AC- entries or Acceptance section found"})
-                    if "Constraint" in content:
-                        verifiable.append({"gate": "Constraints section present", "status": "pass"})
-                    else:
-                        verifiable.append({"gate": "Constraints section present", "status": "fail", "detail": "No Constraints section found"})
-                    if "Assumption" in content:
-                        verifiable.append({"gate": "Assumptions section present", "status": "pass"})
-                    else:
-                        verifiable.append({"gate": "Assumptions section present", "status": "fail", "detail": "No Assumptions section found"})
-                    if "Open Question" in content or "Out-of-Scope" in content:
-                        verifiable.append({"gate": "Open questions / out-of-scope present", "status": "pass"})
-                    else:
-                        verifiable.append({"gate": "Open questions / out-of-scope present", "status": "fail", "detail": "No Open Questions or Out-of-Scope section found"})
-                else:
-                    verifiable.append({"gate": "requirements.md exists", "status": "fail", "detail": "File not found"})
-                
-                human_gates.append({"gate": "Requirements completeness", "requires": "human judgment", "detail": "Verify requirements are complete and correct"})
-                human_gates.append({"gate": "Stakeholder alignment", "requires": "human judgment", "detail": "Verify business priority and stakeholder buy-in"})
-            
-            elif gate_key == "design->implementation":
-                adr_dir = project_path / "docs" / "adr"
-                if adr_dir.is_dir():
-                    adr_files = list(adr_dir.glob("*.md"))
-                    if len(adr_files) > 0:
-                        verifiable.append({"gate": "docs/adr/ exists with ADRs", "status": "pass", "detail": f"{len(adr_files)} ADR(s) found"})
-                        # Check ADR format
-                        for adr in adr_files:
-                            content = adr.read_text(encoding="utf-8")
-                            if all(field in content for field in ["Context", "Decision"]):
-                                verifiable.append({"gate": f"ADR format: {adr.name}", "status": "pass"})
+
+            # Load feature name from state for filename validation
+            state_file = project_path / "sdlc-state.json"
+            feature = ""
+            if state_file.is_file():
+                try:
+                    state = json.loads(state_file.read_text(encoding="utf-8"))
+                    feature = state.get("feature", "")
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            if gate_key == "enhancement->requirements":
+                enh_dir = project_path / "docs" / "enhancement"
+                if enh_dir.is_dir():
+                    enh_files = sorted(enh_dir.glob("*.md"))
+                    if enh_files:
+                        enh_file = enh_files[-1]
+                        verifiable.append({"gate": "docs/enhancement/ directory exists with deliverable", "status": "pass", "detail": f"{enh_file.name}"})
+                        content = enh_file.read_text(encoding="utf-8")
+
+                        # Check required sections
+                        required_sections = ["Current System Overview", "Prior Features", "Relevant Design References", "Change Context"]
+                        for section in required_sections:
+                            if section in content:
+                                verifiable.append({"gate": f"Section present: {section}", "status": "pass"})
                             else:
-                                verifiable.append({"gate": f"ADR format: {adr.name}", "status": "fail", "detail": "Missing Context or Decision fields"})
+                                verifiable.append({"gate": f"Section present: {section}", "status": "fail", "detail": f"No '{section}' section found"})
                     else:
-                        verifiable.append({"gate": "docs/adr/ exists with ADRs", "status": "fail", "detail": "Directory empty"})
+                        verifiable.append({"gate": "docs/enhancement/ directory exists with deliverable", "status": "fail", "detail": "Directory exists but no .md files found"})
                 else:
-                    verifiable.append({"gate": "docs/adr/ exists with ADRs", "status": "fail", "detail": "Directory not found"})
-                
-                human_gates.append({"gate": "Architecture soundness", "requires": "human judgment", "detail": "Verify architecture is appropriate"})
+                    verifiable.append({"gate": "docs/enhancement/ directory exists with deliverable", "status": "fail", "detail": "docs/enhancement/ directory not found"})
+
+                human_gates.append({"gate": "System understanding is adequate", "requires": "human judgment", "detail": "Verify the agent has adequate understanding of the existing system"})
+                human_gates.append({"gate": "Prior architectural decisions considered", "requires": "human judgment", "detail": "Verify prior design decisions have been properly accounted for"})
+                human_gates.append({"gate": "Change context accurately describes fit", "requires": "human judgment", "detail": "Verify the change context accurately describes where the new feature fits"})
+
+            if gate_key == "requirements->design":
+                req_dir = project_path / "docs" / "requirements"
+                if req_dir.is_dir():
+                    req_files = sorted(req_dir.glob("*.md"))
+                    if req_files:
+                        # Use the most recent (highest numbered) file
+                        req_file = req_files[-1]
+                        verifiable.append({"gate": "docs/requirements/ directory exists with deliverable", "status": "pass", "detail": f"{req_file.name}"})
+                        content = req_file.read_text(encoding="utf-8")
+
+                        # Check functional requirements
+                        if "FR-" in content:
+                            verifiable.append({"gate": "Functional requirements present (FR-*)", "status": "pass"})
+                        else:
+                            verifiable.append({"gate": "Functional requirements present (FR-*)", "status": "fail", "detail": "No FR- entries found"})
+
+                        # Check acceptance criteria
+                        if "AC-" in content:
+                            verifiable.append({"gate": "Acceptance criteria present (AC-*)", "status": "pass"})
+                        else:
+                            verifiable.append({"gate": "Acceptance criteria present (AC-*)", "status": "fail", "detail": "No AC- entries found"})
+
+                        # Check constraints
+                        if "Constraint" in content:
+                            verifiable.append({"gate": "Constraints section present", "status": "pass"})
+                        else:
+                            verifiable.append({"gate": "Constraints section present", "status": "fail", "detail": "No Constraints section found"})
+
+                        # Check assumptions
+                        if "Assumption" in content:
+                            verifiable.append({"gate": "Assumptions section present", "status": "pass"})
+                        else:
+                            verifiable.append({"gate": "Assumptions section present", "status": "fail", "detail": "No Assumptions section found"})
+
+                        # Check open questions
+                        if "Open Question" in content:
+                            verifiable.append({"gate": "Open questions section present", "status": "pass"})
+                        else:
+                            verifiable.append({"gate": "Open questions section present", "status": "fail", "detail": "No Open Questions section found"})
+
+                        # Check out-of-scope
+                        if "Out-of-Scope" in content or "Out of Scope" in content:
+                            verifiable.append({"gate": "Out-of-scope section present", "status": "pass"})
+                        else:
+                            verifiable.append({"gate": "Out-of-scope section present", "status": "fail", "detail": "No Out-of-Scope section found"})
+
+                        # Self-review check
+                        if "Self-Review" in content or "Self Review" in content:
+                            verifiable.append({"gate": "Self-review completed", "status": "pass"})
+                        else:
+                            verifiable.append({"gate": "Self-review completed", "status": "fail", "detail": "No Self-Review section found"})
+                    else:
+                        verifiable.append({"gate": "docs/requirements/ directory exists with deliverable", "status": "fail", "detail": "Directory exists but no .md files found"})
+                else:
+                    verifiable.append({"gate": "docs/requirements/ directory exists with deliverable", "status": "fail", "detail": "docs/requirements/ directory not found"})
+
+                human_gates.append({"gate": "Requirements completeness and correctness", "requires": "human judgment", "detail": "Verify requirements are complete and correct"})
+                human_gates.append({"gate": "Business priority and stakeholder alignment", "requires": "human judgment", "detail": "Verify business priority and stakeholder buy-in"})
+                human_gates.append({"gate": "No critical ambiguities remain unresolved", "requires": "human judgment", "detail": "Verify no critical ambiguities remain"})
+
+            elif gate_key == "design->implementation":
+                design_dir = project_path / "docs" / "design"
+                if design_dir.is_dir():
+                    design_files = sorted(design_dir.glob("*.md"))
+                    if len(design_files) > 0:
+                        verifiable.append({"gate": "docs/design/ exists with technical-design documents", "status": "pass", "detail": f"{len(design_files)} document(s) found"})
+                        for design_file in design_files:
+                            content = design_file.read_text(encoding="utf-8")
+                            # Check required technical-design document sections
+                            required_sections = ["TR-", "AC-", "Constraint", "Assumption", "Reference"]
+                            missing = [s for s in required_sections if s not in content]
+                            if not missing:
+                                verifiable.append({"gate": f"Technical-design document format complete: {design_file.name}", "status": "pass"})
+                            else:
+                                verifiable.append({"gate": f"Technical-design document format complete: {design_file.name}", "status": "fail", "detail": f"Missing: {', '.join(missing)}"})
+
+                            # Check technology stack
+                            tech_terms = ["tech stack", "technology stack", "tech-stack", "technology", "framework", "language"]
+                            if any(term in content.lower() for term in tech_terms):
+                                verifiable.append({"gate": f"Technology stack identified: {design_file.name}", "status": "pass"})
+                            else:
+                                verifiable.append({"gate": f"Technology stack identified: {design_file.name}", "status": "fail", "detail": "No technology stack mentioned"})
+
+                            # Check dependencies
+                            dep_terms = ["dependency", "dependencies", "third-party", "third party", "library"]
+                            if any(term in content.lower() for term in dep_terms):
+                                verifiable.append({"gate": f"Dependencies identified: {design_file.name}", "status": "pass"})
+                            else:
+                                verifiable.append({"gate": f"Dependencies identified: {design_file.name}", "status": "fail", "detail": "No dependencies mentioned"})
+
+                            # Self-review check
+                            if "Self-Review" in content or "Self Review" in content:
+                                verifiable.append({"gate": f"Self-review completed: {design_file.name}", "status": "pass"})
+                            else:
+                                verifiable.append({"gate": f"Self-review completed: {design_file.name}", "status": "fail", "detail": "No Self-Review section found"})
+                    else:
+                        verifiable.append({"gate": "docs/design/ exists with technical-design documents", "status": "fail", "detail": "Directory exists but no .md files found"})
+                else:
+                    verifiable.append({"gate": "docs/design/ exists with technical-design documents", "status": "fail", "detail": "docs/design/ directory not found"})
+
+                human_gates.append({"gate": "Architecture soundness", "requires": "human judgment", "detail": "Verify architecture is appropriate for the problem"})
                 human_gates.append({"gate": "Tradeoff analysis", "requires": "human judgment", "detail": "Verify tradeoffs are acceptable"})
-            
+                human_gates.append({"gate": "Scope is appropriately bounded", "requires": "human judgment", "detail": "Verify scope is bounded for this implementation phase"})
+
             elif gate_key == "implementation->review":
+                # Check implementation summary
                 impl_dir = project_path / "docs" / "implementation"
                 if impl_dir.is_dir() and any(impl_dir.glob("*.md")):
+                    impl_files = sorted(impl_dir.glob("*.md"))
+                    impl_summary_text = impl_files[-1].read_text(encoding="utf-8", errors="ignore")
                     verifiable.append({"gate": "Implementation summary exists", "status": "pass"})
                 else:
+                    impl_summary_text = ""
                     verifiable.append({"gate": "Implementation summary exists", "status": "fail", "detail": "docs/implementation/ missing or empty"})
+
                 # Check for source files
                 src_indicators = ["src", "lib", "app", "pkg"]
                 has_src = any((project_path / d).is_dir() for d in src_indicators)
                 if has_src:
                     verifiable.append({"gate": "Source code directory exists", "status": "pass"})
+
+                    # Find source files for inline documentation check
+                    source_files = []
+                    for indicator in src_indicators:
+                        src_path = project_path / indicator
+                        if src_path.is_dir():
+                            source_files.extend(src_path.glob("**/*.py"))
+                            source_files.extend(src_path.glob("**/*.js"))
+                            source_files.extend(src_path.glob("**/*.ts"))
+                            source_files.extend(src_path.glob("**/*.go"))
+                            source_files.extend(src_path.glob("**/*.java"))
+                            source_files.extend(src_path.glob("**/*.rs"))
+
+                    # Check inline documentation
+                    if source_files:
+                        doc_patterns = ['"""', "'''", "/**", "///", "# @param", "# @return", "/// <summary>", "//!"]
+                        files_with_docs = 0
+                        for sf in source_files:
+                            try:
+                                sf_content = sf.read_text(encoding="utf-8")
+                                if any(pattern in sf_content for pattern in doc_patterns):
+                                    files_with_docs += 1
+                            except (OSError, UnicodeDecodeError):
+                                pass
+                        doc_ratio = files_with_docs / len(source_files) if source_files else 0
+                        if doc_ratio > 0:
+                            verifiable.append({"gate": "Inline documentation present in source files", "status": "pass", "detail": f"{files_with_docs}/{len(source_files)} files have documentation"})
+                        else:
+                            verifiable.append({"gate": "Inline documentation present in source files", "status": "fail", "detail": "No inline documentation found in source files"})
+                    else:
+                        verifiable.append({"gate": "Inline documentation present in source files", "status": "fail", "detail": "No source files found to check"})
+
+                    # Check AC mapping coverage against the technical-design document
+                    design_dir = project_path / "docs" / "design"
+                    design_files = sorted(design_dir.glob("*.md")) if design_dir.is_dir() else []
+                    if design_files:
+                        design_text = design_files[-1].read_text(encoding="utf-8", errors="ignore")
+                        ac_ids = sorted(set(re.findall(r"\bAC-[A-Z]+-\d+-\d+\b", design_text)))
+                        if not ac_ids:
+                            verifiable.append({"gate": "AC mapping covers design acceptance criteria", "status": "fail", "detail": f"No AC- entries found in {design_files[-1].name}"})
+                        else:
+                            missing_acs = [a for a in ac_ids if a not in impl_summary_text]
+                            if missing_acs:
+                                verifiable.append({"gate": "AC mapping covers design acceptance criteria", "status": "fail", "detail": f"Missing from implementation summary: {', '.join(missing_acs)}"})
+                            else:
+                                verifiable.append({"gate": "AC mapping covers design acceptance criteria", "status": "pass", "detail": f"All {len(ac_ids)} ACs from {design_files[-1].name} present in implementation summary"})
+                    else:
+                        verifiable.append({"gate": "AC mapping covers design acceptance criteria", "status": "fail", "detail": "No technical-design document found to check AC mapping against"})
+
+                    # Check API documentation
+                    api_doc_indicators = [
+                        project_path / "docs" / "api",
+                        project_path / "docs" / "apidoc",
+                        project_path / "openapi.json",
+                        project_path / "openapi.yaml",
+                        project_path / "swagger.json",
+                        project_path / "swagger.yaml",
+                    ]
+                    has_api_docs = any(p.is_file() or p.is_dir() for p in api_doc_indicators)
+                    skip_recorded = bool(re.search(r"api\s+documentation[\s\S]{0,400}?(?:not\s+required|skip)", impl_summary_text, re.IGNORECASE))
+                    if has_api_docs:
+                        verifiable.append({"gate": "API documentation exists", "status": "pass"})
+                    elif skip_recorded:
+                        verifiable.append({"gate": "API documentation exists", "status": "pass", "detail": "Documented skip recorded in implementation summary"})
+                    else:
+                        verifiable.append({"gate": "API documentation exists", "status": "fail", "detail": "No API documentation found (openapi, swagger, or docs/api/) and no documented skip in implementation summary"})
+
+                    # Check the project's test suite runs successfully
+                    suite_passed, suite_detail = _run_test_suite(project_path)
+                    if suite_passed is True:
+                        verifiable.append({"gate": "Project test suite runs successfully", "status": "pass", "detail": suite_detail})
+                    elif suite_passed is False:
+                        verifiable.append({"gate": "Project test suite runs successfully", "status": "fail", "detail": suite_detail})
+                    else:
+                        verifiable.append({"gate": "Project test suite runs successfully", "status": "fail", "detail": suite_detail})
                 else:
                     verifiable.append({"gate": "Source code directory exists", "status": "fail", "detail": "No src/lib/app/pkg directory found"})
-                
-                human_gates.append({"gate": "Code quality", "requires": "human judgment", "detail": "Verify code meets team standards"})
-            
+                    verifiable.append({"gate": "Inline documentation present in source files", "status": "fail", "detail": "Cannot check without source files"})
+                    verifiable.append({"gate": "API documentation exists", "status": "fail", "detail": "Cannot verify without source context"})
+                    verifiable.append({"gate": "Project test suite runs successfully", "status": "fail", "detail": "Cannot verify without project context"})
+
+                human_gates.append({"gate": "Code quality meets team standards", "requires": "human judgment", "detail": "Verify code meets team standards"})
+                human_gates.append({"gate": "Implementation matches architectural intent", "requires": "human judgment", "detail": "Verify implementation follows the design"})
+                human_gates.append({"gate": "No unexpected technical debt introduced", "requires": "human judgment", "detail": "Verify no unexpected technical debt was introduced"})
+
             elif gate_key == "review->testing":
                 review_dir = project_path / "docs" / "review"
-                if review_dir.is_dir() and any(review_dir.glob("*.md")):
-                    verifiable.append({"gate": "Review report exists", "status": "pass"})
+                if review_dir.is_dir():
+                    review_files = sorted(review_dir.glob("*.md"))
+                    if review_files:
+                        verifiable.append({"gate": "Review report exists", "status": "pass", "detail": f"{len(review_files)} review file(s) found"})
+                        # Check for self-review checklist
+                        for review_file in review_files:
+                            content = review_file.read_text(encoding="utf-8")
+                            checklist_sections = ["Correctness", "Completeness", "Code Quality", "Security"]
+                            found_sections = [s for s in checklist_sections if s in content]
+                            missing_sections = [s for s in checklist_sections if s not in content]
+                            if found_sections:
+                                verifiable.append({"gate": f"Self-review checklist: {review_file.name}", "status": "pass", "detail": f"Found: {', '.join(found_sections)}"})
+                            else:
+                                verifiable.append({"gate": f"Self-review checklist: {review_file.name}", "status": "fail", "detail": f"Missing checklist sections: {', '.join(missing_sections)}"})
+                    else:
+                        verifiable.append({"gate": "Review report exists", "status": "fail", "detail": "docs/review/ exists but no .md files found"})
                 else:
                     verifiable.append({"gate": "Review report exists", "status": "fail", "detail": "docs/review/ missing or empty"})
-                
+
                 human_gates.append({"gate": "Peer review complete", "requires": "human judgment", "detail": "Requires explicit human confirmation that peer review is complete"})
-                human_gates.append({"gate": "Critical issues resolved", "requires": "human judgment", "detail": "Verify all critical and major issues are resolved"})
-            
+                human_gates.append({"gate": "Critical and major issues resolved", "requires": "human judgment", "detail": "Verify all critical and major issues are resolved"})
+
             elif gate_key == "testing->deployment":
-                test_dir = project_path / "docs" / "testing"
-                if test_dir.is_dir() and any(test_dir.glob("*.md")):
-                    verifiable.append({"gate": "Test report exists", "status": "pass"})
+                # Check test files
+                test_dir = project_path / "tests"
+                test_indicators = list(project_path.glob("**/test_*.py")) + list(project_path.glob("**/*_test.py")) + list(project_path.glob("**/*_test.go")) + list(project_path.glob("**/*.test.js")) + list(project_path.glob("**/*.test.ts")) + list(project_path.glob("**/*.spec.js")) + list(project_path.glob("**/*.spec.ts"))
+                # Deduplicate
+                seen = set()
+                unique_tests = []
+                for t in test_indicators:
+                    if t not in seen:
+                        seen.add(t)
+                        unique_tests.append(t)
+                if test_dir.is_dir() or unique_tests:
+                    verifiable.append({"gate": "Test files exist", "status": "pass", "detail": f"{len(unique_tests)} test file(s) found"})
                 else:
-                    verifiable.append({"gate": "Test report exists", "status": "fail", "detail": "docs/testing/ missing or empty"})
-                # Check for test files
-                test_indicators = list(project_path.glob("**/*test*")) + list(project_path.glob("**/*_test.*"))
-                if test_indicators:
-                    verifiable.append({"gate": "Test files exist", "status": "pass", "detail": f"{len(test_indicators)} test file(s) found"})
+                    verifiable.append({"gate": "Test files exist", "status": "fail", "detail": "No test files found in tests/ or alongside source"})
+
+                # Check test report
+                test_report_dir = project_path / "docs" / "testing"
+                if test_report_dir.is_dir():
+                    test_report_files = sorted(test_report_dir.glob("*.md"))
+                    if test_report_files:
+                        verifiable.append({"gate": "Test report exists", "status": "pass", "detail": f"{len(test_report_files)} report(s) found"})
+                        # Check for coverage threshold in report
+                        report_content = test_report_files[-1].read_text(encoding="utf-8")
+                        if "coverage" in report_content.lower():
+                            verifiable.append({"gate": "Coverage documented in test report", "status": "pass"})
+                        else:
+                            verifiable.append({"gate": "Coverage documented in test report", "status": "fail", "detail": "No coverage information in test report"})
+
+                        # Check AC traceability against design
+                        design_dir = project_path / "docs" / "design"
+                        design_files = sorted(design_dir.glob("*.md")) if design_dir.is_dir() else []
+                        if design_files:
+                            design_text = design_files[-1].read_text(encoding="utf-8", errors="ignore")
+                            ac_ids = sorted(set(re.findall(r"\bAC-[A-Z]+-\d+-\d+\b", design_text)))
+                            if not ac_ids:
+                                verifiable.append({"gate": "AC traceability covers design acceptance criteria", "status": "fail", "detail": f"No AC- entries found in {design_files[-1].name}"})
+                            else:
+                                missing_acs = [a for a in ac_ids if a not in report_content]
+                                if missing_acs:
+                                    verifiable.append({"gate": "AC traceability covers design acceptance criteria", "status": "fail", "detail": f"Missing from test report: {', '.join(missing_acs)}"})
+                                else:
+                                    verifiable.append({"gate": "AC traceability covers design acceptance criteria", "status": "pass", "detail": f"All {len(ac_ids)} ACs from {design_files[-1].name} present in test report"})
+                        else:
+                            verifiable.append({"gate": "AC traceability covers design acceptance criteria", "status": "fail", "detail": "No technical-design document found to check traceability against"})
+                    else:
+                        verifiable.append({"gate": "Test report exists", "status": "fail", "detail": "docs/testing/ exists but no .md files found"})
                 else:
-                    verifiable.append({"gate": "Test files exist", "status": "fail", "detail": "No test files found"})
-                
-                human_gates.append({"gate": "Test coverage sufficient", "requires": "human judgment", "detail": "Verify coverage is adequate"})
-                human_gates.append({"gate": "Regression risk acceptable", "requires": "human judgment", "detail": "Verify edge cases are tested"})
-            
+                    verifiable.append({"gate": "Test report exists", "status": "fail", "detail": "docs/testing/ not found"})
+
+                suite_passed, suite_detail = _run_test_suite(project_path)
+                if suite_passed is True:
+                    verifiable.append({"gate": "Test suite passes (exit code 0)", "status": "pass", "detail": suite_detail})
+                elif suite_passed is False:
+                    verifiable.append({"gate": "Test suite passes (exit code 0)", "status": "fail", "detail": suite_detail})
+                else:
+                    verifiable.append({"gate": "Test suite passes (exit code 0)", "status": "fail", "detail": suite_detail})
+
+                human_gates.append({"gate": "Test coverage is sufficient", "requires": "human judgment", "detail": "Verify coverage meets defined threshold"})
+                human_gates.append({"gate": "Regression risk is acceptable", "requires": "human judgment", "detail": "Verify regression risk is managed"})
+                human_gates.append({"gate": "Edge cases are adequately tested", "requires": "human judgment", "detail": "Verify edge cases are covered"})
+
             elif gate_key == "deployment->monitoring":
                 deploy_dir = project_path / "docs" / "deploy"
-                if deploy_dir.is_dir() and any(deploy_dir.glob("*.md")):
-                    verifiable.append({"gate": "Deployment config exists", "status": "pass"})
+                if deploy_dir.is_dir():
+                    deploy_files = sorted(deploy_dir.glob("*.md"))
+                    if deploy_files:
+                        verifiable.append({"gate": "Deployment config exists", "status": "pass", "detail": f"{len(deploy_files)} file(s) found"})
+                        # Check for rollback procedure
+                        rollback_found = False
+                        rollback_content = ""
+                        for df in deploy_files:
+                            content = df.read_text(encoding="utf-8")
+                            if "rollback" in content.lower():
+                                rollback_found = True
+                                rollback_content += content
+                        if rollback_found:
+                            rollback_sections = ["trigger", "rollback steps", "data rollback", "communication", "verification"]
+                            found_rb = [s for s in rollback_sections if s in rollback_content.lower()]
+                            if len(found_rb) >= 2:
+                                verifiable.append({"gate": "Rollback procedure documented", "status": "pass", "detail": f"Found sections: {', '.join(found_rb)}"})
+                            else:
+                                verifiable.append({"gate": "Rollback procedure documented", "status": "fail", "detail": f"Rollback found but incomplete. Found: {', '.join(found_rb)}. Expected: {', '.join(rollback_sections)}"})
+                        else:
+                            verifiable.append({"gate": "Rollback procedure documented", "status": "fail", "detail": "No rollback procedure found in deployment docs"})
+                    else:
+                        verifiable.append({"gate": "Deployment config exists", "status": "fail", "detail": "docs/deploy/ exists but no .md files found"})
                 else:
-                    verifiable.append({"gate": "Deployment config exists", "status": "fail", "detail": "docs/deploy/ missing or empty"})
-                
-                human_gates.append({"gate": "Deployment successful", "requires": "human judgment", "detail": "Post-deployment verification required"})
-                human_gates.append({"gate": "System stable", "requires": "human judgment", "detail": "Production stability confirmation"})
-            
+                    verifiable.append({"gate": "Deployment config exists", "status": "fail", "detail": "docs/deploy/ not found"})
+
+                # Check CI/CD pipeline files
+                cicd_indicators = [
+                    project_path / ".github" / "workflows",
+                    project_path / "Jenkinsfile",
+                    project_path / ".gitlab-ci.yml",
+                    project_path / "azure-pipelines.yml",
+                    project_path / ".circleci" / "config.yml",
+                    project_path / "Bitbucket Pipelines",
+                ]
+                has_cicd = any(p.is_file() or p.is_dir() for p in cicd_indicators)
+                if has_cicd:
+                    verifiable.append({"gate": "CI/CD pipeline files exist", "status": "pass"})
+                else:
+                    verifiable.append({"gate": "CI/CD pipeline files exist", "status": "fail", "detail": "No CI/CD pipeline files found"})
+
+                human_gates.append({"gate": "Deployment is successful", "requires": "human judgment", "detail": "Post-deployment verification required"})
+                human_gates.append({"gate": "System is stable in production", "requires": "human judgment", "detail": "Production stability confirmation"})
+
             else:
-                result = [TextContent(type="text", text=f"Unknown gate transition: {gate_key}. Valid transitions: requirements->design, design->implementation, implementation->review, review->testing, testing->deployment, deployment->monitoring")]
+                result = [TextContent(type="text", text=f"Unknown gate transition: {gate_key}. Valid transitions: enhancement->requirements, requirements->design, design->implementation, implementation->review, review->testing, testing->deployment, deployment->monitoring")]
                 logger.debug(f"call_tool: check_gate unknown transition, returning error")
                 return result
-            
+
             # Determine overall status
             all_verifiable_pass = all(g.get("status") == "pass" for g in verifiable)
             if not verifiable:
@@ -453,7 +829,7 @@ async def call_tool(name, args):
                 overall = "pass" if not human_gates else "pending"
             else:
                 overall = "fail"
-            
+
             result_text = json.dumps({"overall": overall, "verifiable_gates": verifiable, "human_gates": human_gates}, indent=2)
             result = [TextContent(type="text", text=result_text)]
             logger.debug(f"call_tool: check_gate overall={overall}, {len(verifiable)} verifiable, {len(human_gates)} human")
@@ -464,7 +840,7 @@ async def call_tool(name, args):
             decision = args.get("decision", "")
             caveats = args.get("caveats", "")
             risk_acceptances = args.get("risk_acceptances", [])
-            
+
             # Get feature name from state
             state_file = project_path / "sdlc-state.json"
             feature = "unknown"
@@ -474,14 +850,14 @@ async def call_tool(name, args):
                     feature = state.get("feature", "unknown")
                 except json.JSONDecodeError:
                     pass
-            
+
             # Create approval file
             decisions_dir = project_path / "docs" / "decisions"
             decisions_dir.mkdir(parents=True, exist_ok=True)
             approval_file = decisions_dir / f"{feature}-approval.md"
-            
+
             timestamp = __import__("datetime").datetime.now().isoformat()
-            
+
             # Build entry
             entry_lines = [
                 f"## {phase} — {timestamp}",
@@ -496,16 +872,16 @@ async def call_tool(name, args):
                     entry_lines.append(f"    - Agent recommended: {ra.get('agent_recommendation', 'N/A')}")
                     entry_lines.append(f"    - Human decision: {ra.get('human_decision', 'N/A')}")
                     entry_lines.append(f"    - Justification: {ra.get('justification', 'N/A')}")
-            
+
             entry_text = "\n".join(entry_lines) + "\n"
-            
+
             # Append or create
             if approval_file.is_file():
                 existing = approval_file.read_text(encoding="utf-8")
                 approval_file.write_text(existing + "\n" + entry_text, encoding="utf-8")
             else:
                 approval_file.write_text(f"# Approval Log — Feature: {feature}\n\n" + entry_text, encoding="utf-8")
-            
+
             result = [TextContent(type="text", text=f"Approval recorded for {phase} phase in {approval_file}. Decision: {decision}")]
             logger.debug(f"call_tool: record_approval wrote to {approval_file}")
             return result

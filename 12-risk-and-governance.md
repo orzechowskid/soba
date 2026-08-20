@@ -84,8 +84,8 @@
 ## 4. Third-Party Dependency Risk
 
 - Evaluate before adding: maintenance activity, license compatibility, known vulnerabilities, supply chain exposure.
-- Document the rationale for inclusion in the ADR or implementation summary.
-- Pin versions per `05-phase-implementation.md` rules.
+- Document the rationale for inclusion in the technical-design document or implementation summary.
+- Pin versions per `04-phase-implementation.md` rules.
 - Re-audit on every major version bump and at each quarterly review.
 
 ---
@@ -103,7 +103,7 @@
 ## 6. Accountability
 
 - Every decision, especially risk-accepting ones, must be documented.
-- Architectural risks: record in an ADR stored in `docs/adr/` (in the **target project root**).
+- Architectural risks: record in the technical-design document stored in `docs/design/` (in the **target project root**).
 - Implementation risks: record in the review or implementation report.
 - The human user owns final accountability for all risk acceptance. Agents may flag and recommend but cannot accept risk on their own authority.
 
@@ -111,7 +111,7 @@
 
 ## 7. Output
 
-Create `docs/risks/<number>-<feature>.md` (relative to the **target project root**) aligned with ADR and implementation numbering.
+Create `docs/risks/<number>-<feature>.md` (relative to the **target project root**) aligned with technical-design document and implementation numbering.
 
 Required fields:
 
@@ -128,7 +128,7 @@ Required fields:
 When an agent flags a risk and the human user chooses to proceed despite it, the agent MUST record the acceptance.
 
 ### Location
-`docs/risks/<number>-<feature>-acceptances.md` (relative to the target project root), aligned with ADR and implementation numbering.
+`docs/risks/<number>-<feature>-acceptances.md` (relative to the target project root), aligned with technical-design document and implementation numbering.
 
 ### Required Fields
 - **Risk Description** — what the risk is
